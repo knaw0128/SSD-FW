@@ -89,10 +89,13 @@ void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigne
 		reqCode = REQ_CODE_WRITE;
 	else if(cmdCode == IO_NVM_READ)
 		reqCode = REQ_CODE_READ;
+	else if(cmdCode == IO_NVM_VEC_ADD)
+		reqCode = 0 // TODO: Change to true value
 	else
 		assert(!"[WARNING] Not supported command code [WARNING]");
 
 	//first transform
+	// 為甚麼這裡是這樣計算 Num of nvme block, loop 的用途是啥
 	nvmeBlockOffset = (startLba % NVME_BLOCKS_PER_SLICE);
 	if(loop)
 		tempNumOfNvmeBlock = NVME_BLOCKS_PER_SLICE - nvmeBlockOffset;
@@ -101,7 +104,7 @@ void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigne
 
 	reqSlotTag = GetFromFreeReqQ();
 
-	reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE;
+	reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE; // DMA 需要改這個
 	reqPoolPtr->reqPool[reqSlotTag].reqCode = reqCode;
 	reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = cmdSlotTag;
 	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = tempLsa;
@@ -252,7 +255,7 @@ void ReqTransSliceToLowLevel()
 			if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_READ)
 				DataReadFromNand(reqSlotTag);
 			else if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_WRITE)
-				if(reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock != NVME_BLOCKS_PER_SLICE) //for read modify write
+				if(reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock != NVME_BLOCKS_PER_SLICE) //for read modify write 為甚麼需要讀
 					DataReadFromNand(reqSlotTag);
 		}
 

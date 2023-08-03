@@ -113,6 +113,35 @@ void handle_nvme_io_write(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
 	ReqTransNvmeToSlice(cmdSlotTag, startLba[0], nlb, IO_NVM_WRITE);
 }
 
+void handle_nvme_io_vec_add(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
+{
+	// TODO:
+	// IO_VEC_ADD_COMMAND struct 怎麼定
+	// reqPoolPtr 是放 slice 的 ptr, 需要把 slice 放到這裡面
+	// 檢查一下 slice 怎麼定
+	
+	IO_READ_COMMAND_DW12 readInfo12;
+	//IO_READ_COMMAND_DW13 readInfo13;
+	//IO_READ_COMMAND_DW15 readInfo15;
+	unsigned int startLba[2];
+	unsigned int nlb;
+
+	readInfo12.dword = nvmeIOCmd->dword[12];
+	//readInfo13.dword = nvmeIOCmd->dword[13];
+	//readInfo15.dword = nvmeIOCmd->dword[15];
+
+	startLba[0] = nvmeIOCmd->dword[10];
+	startLba[1] = nvmeIOCmd->dword[11];
+	nlb = readInfo12.NLB;
+
+	ASSERT(startLba[0] < storageCapacity_L && (startLba[1] < STORAGE_CAPACITY_H || startLba[1] == 0));
+	//ASSERT(nlb < MAX_NUM_OF_NLB);
+	ASSERT((nvmeIOCmd->PRP1[0] & 0x3) == 0 && (nvmeIOCmd->PRP2[0] & 0x3) == 0); //error
+	ASSERT(nvmeIOCmd->PRP1[1] < 0x10000 && nvmeIOCmd->PRP2[1] < 0x10000);
+
+	ReqTransNvmeToSlice(cmdSlotTag, startLba[0], nlb, IO_NVM_READ);
+}
+
 void handle_nvme_io_cmd(NVME_COMMAND *nvmeCmd)
 {
 	NVME_IO_COMMAND *nvmeIOCmd;
@@ -149,6 +178,11 @@ void handle_nvme_io_cmd(NVME_COMMAND *nvmeCmd)
 		{
 //			xil_printf("IO Read Command\r\n");
 			handle_nvme_io_read(nvmeCmd->cmdSlotTag, nvmeIOCmd);
+			break;
+		}
+		case IO_NVM_VEC_ADD:
+		{
+			handle_nvme_io_vec_add(nvmeCmd->cmdSlotTag, nvmeIOCmd);
 			break;
 		}
 		default:

@@ -1,0 +1,13 @@
+
+Lba 指的 block 與 address 的換算
+nvmeBlockOffset = (startLba % NVME_BLOCKS_PER_SLICE);  <- 這是用來幹嘛的
+是不是需要自訂 reqcode 
+loop = ((startLba % NVME_BLOCKS_PER_SLICE) + requestedNvmeBlock) / NVME_BLOCKS_PER_SLICE; <- loop 的計算方式為甚麼是這樣
+read command 為甚麼需要 loop
+loop 中看起來像是加了很多 w/r command 進去 queue 而已
+logicalSliceAddr 是否是要讀取的位址 (轉換過的)
+
+
+
+
+

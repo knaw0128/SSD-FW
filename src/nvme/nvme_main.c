@@ -105,7 +105,8 @@ void nvme_main()
 			unsigned int cmdValid;
 			cmdValid = get_nvme_cmd(&nvmeCmd.qID, &nvmeCmd.cmdSlotTag, &nvmeCmd.cmdSeqNum, nvmeCmd.cmdDword);
 			if(cmdValid == 1)
-			{	rstCnt = 0;
+			{	
+				rstCnt = 0;
 				if(nvmeCmd.qID == 0)
 				{
 					handle_nvme_admin_cmd(&nvmeCmd);
