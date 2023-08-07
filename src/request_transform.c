@@ -83,19 +83,22 @@ void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigne
 	transCounter = 0;
 	nvmeDmaStartIndex = 0;
 	tempLsa = startLba / NVME_BLOCKS_PER_SLICE;
-	loop = ((startLba % NVME_BLOCKS_PER_SLICE) + requestedNvmeBlock) / NVME_BLOCKS_PER_SLICE;
 
 	if(cmdCode == IO_NVM_WRITE)
 		reqCode = REQ_CODE_WRITE;
 	else if(cmdCode == IO_NVM_READ)
 		reqCode = REQ_CODE_READ;
-	else if(cmdCode == IO_NVM_VEC_ADD)
-		reqCode = 0 // TODO: Change to true value
+	else if(cmdCode == IO_NVM_VEC_ADD){
+		reqCode = REQ_CODE_VEC_ADD; 
+		requestedNvmeBlock = 3;
+	}
 	else
 		assert(!"[WARNING] Not supported command code [WARNING]");
 
+	loop = ((startLba % NVME_BLOCKS_PER_SLICE) + requestedNvmeBlock) / NVME_BLOCKS_PER_SLICE;
+
+
 	//first transform
-	// 為甚麼這裡是這樣計算 Num of nvme block, loop 的用途是啥
 	nvmeBlockOffset = (startLba % NVME_BLOCKS_PER_SLICE);
 	if(loop)
 		tempNumOfNvmeBlock = NVME_BLOCKS_PER_SLICE - nvmeBlockOffset;
@@ -104,7 +107,7 @@ void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigne
 
 	reqSlotTag = GetFromFreeReqQ();
 
-	reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE; // DMA 需要改這個
+	reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE;
 	reqPoolPtr->reqPool[reqSlotTag].reqCode = reqCode;
 	reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = cmdSlotTag;
 	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = tempLsa;
@@ -159,7 +162,6 @@ void ReqTransNvmeToSlice(unsigned int cmdSlotTag, unsigned int startLba, unsigne
 
 	PutToSliceReqQ(reqSlotTag);
 }
-
 
 
 void EvictDataBufEntry(unsigned int originReqSlotTag)
@@ -221,7 +223,6 @@ void DataReadFromNand(unsigned int originReqSlotTag)
 	}
 }
 
-
 void ReqTransSliceToLowLevel()
 {
 	unsigned int reqSlotTag, dataBufEntry;
@@ -234,7 +235,13 @@ void ReqTransSliceToLowLevel()
 
 		//allocate a data buffer entry for this request
 		dataBufEntry = CheckDataBufHit(reqSlotTag);
-		if(dataBufEntry != DATA_BUF_FAIL)
+		if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_VEC_ADD){
+			unsigned int dataBufEntry2;
+			SwapLSA(reqSlotTag);
+			dataBufEntry2 = CheckDataBufHit(reqSlotTag);
+			
+		}
+		else if(dataBufEntry != DATA_BUF_FAIL)
 		{
 			//data buffer hit
 			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry;
@@ -403,7 +410,6 @@ unsigned int UpdateRowAddrDepTableForBufBlockedReq(unsigned int reqSlotTag)
 
 	return ROW_ADDR_DEPENDENCY_TABLE_UPDATE_REPORT_DONE;
 }
-
 
 
 void SelectLowLevelReqQ(unsigned int reqSlotTag)
@@ -648,4 +654,95 @@ void CheckDoneNvmeDmaReq()
 }
 
 
+void ReqTransNvmeVecAddToSlice(unsigned int cmdSlotTag, unsigned int startLba1, unsigned int startLba2, unsigned int nlb, unsigned int cmdCode)
+{
+	unsigned int reqSlotTag, requestedNvmeBlock, tempNumOfNvmeBlock, transCounter, tempLsa1, loop, nvmeBlockOffset, nvmeDmaStartIndex, reqCode;
 
+	requestedNvmeBlock = nlb + 1;
+	transCounter = 0;
+	nvmeDmaStartIndex = 0;
+	tempLsa1 = startLba1 / NVME_BLOCKS_PER_SLICE;
+	tempLsa2 = startLba2 / NVME_BLOCKS_PER_SLICE;
+
+	if(cmdCode == IO_NVM_VEC_ADD)
+		reqCode = REQ_CODE_VEC_ADD; 
+	else
+		assert(!"[WARNING] Not supported command code [WARNING]");
+
+	loop = ((startLba1 % NVME_BLOCKS_PER_SLICE) + requestedNvmeBlock) / NVME_BLOCKS_PER_SLICE;
+
+	//first transform
+	nvmeBlockOffset = (startLba1 % NVME_BLOCKS_PER_SLICE);
+	if(loop)
+		tempNumOfNvmeBlock = NVME_BLOCKS_PER_SLICE - nvmeBlockOffset;
+	else
+		tempNumOfNvmeBlock = requestedNvmeBlock;
+
+	reqSlotTag = GetFromFreeReqQ();
+
+	reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE;
+	reqPoolPtr->reqPool[reqSlotTag].reqCode = reqCode;
+	reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = cmdSlotTag;
+	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = tempLsa1;
+	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex = nvmeDmaStartIndex;
+	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.nvmeBlockOffset = nvmeBlockOffset;
+	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock = tempNumOfNvmeBlock;
+	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = tempLsa2;
+
+	PutToSliceReqQ(reqSlotTag);
+
+	tempLsa1++;
+	tempLsa2++;
+	transCounter++;
+	nvmeDmaStartIndex += tempNumOfNvmeBlock;
+
+	//transform continue
+	while(transCounter < loop)
+	{
+		nvmeBlockOffset = 0;
+		tempNumOfNvmeBlock = NVME_BLOCKS_PER_SLICE;
+
+		reqSlotTag = GetFromFreeReqQ();
+
+		reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE;
+		reqPoolPtr->reqPool[reqSlotTag].reqCode = reqCode;
+		reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = cmdSlotTag;
+		reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = tempLsa1;
+		reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex = nvmeDmaStartIndex;
+		reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.nvmeBlockOffset = nvmeBlockOffset;
+		reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock = tempNumOfNvmeBlock;
+		reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr2 = tempLsa2;
+
+		PutToSliceReqQ(reqSlotTag);
+
+		tempLsa1++;
+		tempLsa2++;
+		transCounter++;
+		nvmeDmaStartIndex += tempNumOfNvmeBlock;
+	}
+
+	//last transform
+	nvmeBlockOffset = 0;
+	tempNumOfNvmeBlock = (startLba1 + requestedNvmeBlock) % NVME_BLOCKS_PER_SLICE;
+	if((tempNumOfNvmeBlock == 0) || (loop == 0))
+		return ;
+
+	reqSlotTag = GetFromFreeReqQ();
+
+	reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE;
+	reqPoolPtr->reqPool[reqSlotTag].reqCode = reqCode;
+	reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = cmdSlotTag;
+	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = tempLsa1;
+	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex = nvmeDmaStartIndex;
+	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.nvmeBlockOffset = nvmeBlockOffset;
+	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock = tempNumOfNvmeBlock;
+	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr2 = tempLsa2;
+	
+	PutToSliceReqQ(reqSlotTag);
+}
+
+void SwapLSA(unsigned int reqSlotTag){
+	unsigned int tmp = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr;
+	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr2;
+	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr2 = tmp;
+}

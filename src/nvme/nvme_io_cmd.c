@@ -85,7 +85,6 @@ void handle_nvme_io_read(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
 	ReqTransNvmeToSlice(cmdSlotTag, startLba[0], nlb, IO_NVM_READ);
 }
 
-
 void handle_nvme_io_write(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
 {
 	IO_READ_COMMAND_DW12 writeInfo12;
@@ -120,26 +119,25 @@ void handle_nvme_io_vec_add(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
 	// reqPoolPtr 是放 slice 的 ptr, 需要把 slice 放到這裡面
 	// 檢查一下 slice 怎麼定
 	
-	IO_READ_COMMAND_DW12 readInfo12;
-	//IO_READ_COMMAND_DW13 readInfo13;
-	//IO_READ_COMMAND_DW15 readInfo15;
-	unsigned int startLba[2];
+	unsigned int startLba_1[2];
+	unsigned int startLba_2[2];
+
 	unsigned int nlb;
 
-	readInfo12.dword = nvmeIOCmd->dword[12];
-	//readInfo13.dword = nvmeIOCmd->dword[13];
-	//readInfo15.dword = nvmeIOCmd->dword[15];
+	startLba_1[0] = nvmeIOCmd->dword[10];
+	startLba_1[1] = nvmeIOCmd->dword[11];
 
-	startLba[0] = nvmeIOCmd->dword[10];
-	startLba[1] = nvmeIOCmd->dword[11];
-	nlb = readInfo12.NLB;
+	startLba_2[0] = nvmeIOCmd->dword[12];
+	startLba_2[1] = nvmeIOCmd->dword[13];
+	nlb = 2;
 
-	ASSERT(startLba[0] < storageCapacity_L && (startLba[1] < STORAGE_CAPACITY_H || startLba[1] == 0));
+	ASSERT(startLba_1[0] < storageCapacity_L && (startLba_1[1] < STORAGE_CAPACITY_H || startLba_1[1] == 0));
+	ASSERT(startLba_2[0] < storageCapacity_L && (startLba_2[1] < STORAGE_CAPACITY_H || startLba_2[1] == 0));
 	//ASSERT(nlb < MAX_NUM_OF_NLB);
 	ASSERT((nvmeIOCmd->PRP1[0] & 0x3) == 0 && (nvmeIOCmd->PRP2[0] & 0x3) == 0); //error
 	ASSERT(nvmeIOCmd->PRP1[1] < 0x10000 && nvmeIOCmd->PRP2[1] < 0x10000);
 
-	ReqTransNvmeToSlice(cmdSlotTag, startLba[0], nlb, IO_NVM_READ);
+	ReqTransNvmeVevAddToSlice(cmdSlotTag, startLba_1[0], startLba_2[0], nlb, IO_NVM_VEC_ADD);
 }
 
 void handle_nvme_io_cmd(NVME_COMMAND *nvmeCmd)
