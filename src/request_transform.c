@@ -226,6 +226,7 @@ void DataReadFromNand(unsigned int originReqSlotTag)
 void ReqTransSliceToLowLevel()
 {
 	unsigned int reqSlotTag, dataBufEntry;
+	unsigned int dataBufEntry2, resultDataBufferEntry;
 
 	while(sliceReqQ.headReq != REQ_SLOT_TAG_NONE)
 	{
@@ -236,10 +237,36 @@ void ReqTransSliceToLowLevel()
 		//allocate a data buffer entry for this request
 		dataBufEntry = CheckDataBufHit(reqSlotTag);
 		if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_VEC_ADD){
-			unsigned int dataBufEntry2;
+			
 			SwapLSA(reqSlotTag);
 			dataBufEntry2 = CheckDataBufHit(reqSlotTag);
 			
+			if(dataBufEntry2 == DATA_BUF_FAIL){
+				dataBufEntry2 = AllocateDataBuf();
+				reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry2;
+				EvictDataBufEntry(reqSlotTag);
+				dataBufMapPtr->dataBuf[dataBufEntry2].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr;
+				PutToDataBufHashList(dataBufEntry2);
+				DataReadFromNand(reqSlotTag);
+			}
+			UpdateDataBufEntryInfoBlockingReq(dataBufEntry2, reqSlotTag);
+			SwapLSA(reqSlotTag);
+
+			if(dataBufEntry == DATA_BUF_FAIL){
+				dataBufEntry = AllocateDataBuf();
+				reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = dataBufEntry;
+				EvictDataBufEntry(reqSlotTag);
+				dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr;
+				PutToDataBufHashList(dataBufEntry);
+				DataReadFromNand(reqSlotTag);
+			}
+			UpdateDataBufEntryInfoBlockingReq(dataBufEntry, reqSlotTag);
+
+			resultDataBufferEntry = = AllocateDataBuf();
+			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = resultDataBufferEntry;
+			EvictDataBufEntry(reqSlotTag);
+			dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].resultLogicalSliceAddr;
+			PutToDataBufHashList(resultDataBufferEntry);
 		}
 		else if(dataBufEntry != DATA_BUF_FAIL)
 		{
@@ -274,6 +301,9 @@ void ReqTransSliceToLowLevel()
 		}
 		else if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_READ)
 			reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_TxDMA;
+		else if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_VEC_ADD){
+			VecAdd(dataBufferEntry, dataBufferEntry2, ResultDataBufEntry);
+		}
 		else
 			assert(!"[WARNING] Not supported reqCode. [WARNING]");
 

@@ -95,8 +95,6 @@ void nvme_main()
 			{
 				set_nvme_admin_queue(1, 1, 1);
 				set_nvme_csts_rdy(1);
-				g_nvmeTask.status = NVME_TASK_RUNNING;
-				xil_printf("\r\nNVMe ready!!!\r\n");
 			}
 		}
 		else if(g_nvmeTask.status == NVME_TASK_RUNNING)
