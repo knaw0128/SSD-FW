@@ -70,6 +70,8 @@
 
 volatile NVME_CONTEXT g_nvmeTask;
 
+#include "vec_adder_driver.h"
+
 void nvme_main()
 {
 	unsigned int exeLlr;
@@ -82,6 +84,25 @@ void nvme_main()
 	xil_printf("\r\nFTL reset complete!!! \r\n");
 	xil_printf("Turn on the host PC \r\n");
 
+	// ======== Testing ========
+
+	int s1[100], s2[100], result[100];
+	for(int i=0;i<100;i++){
+		s1[i] = i + 1;
+		s2[i] = i;
+	}
+
+	struct vec_adder* adder = ; 
+
+	vec_adder_add(, s1, s2, result, 100);
+	
+	for(int i=0;i<100;i++){
+		if(result[i] != s1[i] + s2[i])
+			xil_printf("ERROR\r\n");
+	}
+
+	// =========================
+	
 	while(1)
 	{
 		exeLlr = 1;
