@@ -51,6 +51,7 @@
 #define REQ_TYPE_SLICE			0x0
 #define REQ_TYPE_NAND			0x1
 #define REQ_TYPE_NVME_DMA		0x2
+#define REQ_TYPE_VEC_ADD		0x3
 
 #define REQ_QUEUE_TYPE_NONE							0x0
 #define REQ_QUEUE_TYPE_FREE							0x1

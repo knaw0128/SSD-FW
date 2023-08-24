@@ -262,11 +262,13 @@ void ReqTransSliceToLowLevel()
 			}
 			UpdateDataBufEntryInfoBlockingReq(dataBufEntry, reqSlotTag);
 
-			resultDataBufferEntry = = AllocateDataBuf();
+			resultDataBufferEntry = AllocateDataBuf();
 			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = resultDataBufferEntry;
 			EvictDataBufEntry(reqSlotTag);
-			dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].resultLogicalSliceAddr;
+			dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr;
 			PutToDataBufHashList(resultDataBufferEntry);
+
+			VectorAdd(reqSlotTag); // result put at lsa 1
 		}
 		else if(dataBufEntry != DATA_BUF_FAIL)
 		{
@@ -302,7 +304,7 @@ void ReqTransSliceToLowLevel()
 		else if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_READ)
 			reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_TxDMA;
 		else if(reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_VEC_ADD){
-			VecAdd(dataBufferEntry, dataBufferEntry2, ResultDataBufEntry);
+			reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_TxDMA;
 		}
 		else
 			assert(!"[WARNING] Not supported reqCode. [WARNING]");
@@ -310,7 +312,7 @@ void ReqTransSliceToLowLevel()
 		reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_NVME_DMA;
 		reqPoolPtr->reqPool[reqSlotTag].reqOpt.dataBufFormat = REQ_OPT_DATA_BUF_ENTRY;
 
-		UpdateDataBufEntryInfoBlockingReq(dataBufEntry, reqSlotTag);
+		UpdateDataBufEntryInfoBlockingReq(dataBufEntry);
 		SelectLowLevelReqQ(reqSlotTag);
 	}
 }
@@ -487,6 +489,9 @@ void SelectLowLevelReqQ(unsigned int reqSlotTag)
 				assert(!"[WARNING] Not supported reqOpt [WARNING]");
 
 		}
+		else if(reqPoolPtr->reqPool[reqSlotTag].reqType == REQ_TYPE_VEC_ADD){
+			PutToVecAdderReqQ(reqSlotTag);
+		}
 		else
 			assert(!"[WARNING] Not supported reqType [WARNING]");
 	}
@@ -506,7 +511,9 @@ void SelectLowLevelReqQ(unsigned int reqSlotTag)
 				else
 					assert(!"[WARNING] Not supported report [WARNING]");
 			}
-
+		else if(reqPoolPtr->reqPool[reqSlotTag].reqType == REQ_TYPE_VEC_ADD){
+			PutToVecAdderReqQ(reqSlotTag);
+		}
 		PutToBlockedByBufDepReqQ(reqSlotTag);
 	}
 	else
@@ -699,14 +706,10 @@ void ReqTransNvmeVecAddToSlice(unsigned int cmdSlotTag, unsigned int startLba1, 
 	else
 		assert(!"[WARNING] Not supported command code [WARNING]");
 
-	loop = ((startLba1 % NVME_BLOCKS_PER_SLICE) + requestedNvmeBlock) / NVME_BLOCKS_PER_SLICE;
 
 	//first transform
 	nvmeBlockOffset = (startLba1 % NVME_BLOCKS_PER_SLICE);
-	if(loop)
-		tempNumOfNvmeBlock = NVME_BLOCKS_PER_SLICE - nvmeBlockOffset;
-	else
-		tempNumOfNvmeBlock = requestedNvmeBlock;
+	tempNumOfNvmeBlock = requestedNvmeBlock;
 
 	reqSlotTag = GetFromFreeReqQ();
 
@@ -720,59 +723,41 @@ void ReqTransNvmeVecAddToSlice(unsigned int cmdSlotTag, unsigned int startLba1, 
 	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = tempLsa2;
 
 	PutToSliceReqQ(reqSlotTag);
-
-	tempLsa1++;
-	tempLsa2++;
-	transCounter++;
-	nvmeDmaStartIndex += tempNumOfNvmeBlock;
-
-	//transform continue
-	while(transCounter < loop)
-	{
-		nvmeBlockOffset = 0;
-		tempNumOfNvmeBlock = NVME_BLOCKS_PER_SLICE;
-
-		reqSlotTag = GetFromFreeReqQ();
-
-		reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE;
-		reqPoolPtr->reqPool[reqSlotTag].reqCode = reqCode;
-		reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = cmdSlotTag;
-		reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = tempLsa1;
-		reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex = nvmeDmaStartIndex;
-		reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.nvmeBlockOffset = nvmeBlockOffset;
-		reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock = tempNumOfNvmeBlock;
-		reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr2 = tempLsa2;
-
-		PutToSliceReqQ(reqSlotTag);
-
-		tempLsa1++;
-		tempLsa2++;
-		transCounter++;
-		nvmeDmaStartIndex += tempNumOfNvmeBlock;
-	}
-
-	//last transform
-	nvmeBlockOffset = 0;
-	tempNumOfNvmeBlock = (startLba1 + requestedNvmeBlock) % NVME_BLOCKS_PER_SLICE;
-	if((tempNumOfNvmeBlock == 0) || (loop == 0))
-		return ;
-
-	reqSlotTag = GetFromFreeReqQ();
-
-	reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_SLICE;
-	reqPoolPtr->reqPool[reqSlotTag].reqCode = reqCode;
-	reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = cmdSlotTag;
-	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = tempLsa1;
-	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.startIndex = nvmeDmaStartIndex;
-	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.nvmeBlockOffset = nvmeBlockOffset;
-	reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.numOfNvmeBlock = tempNumOfNvmeBlock;
-	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr2 = tempLsa2;
-	
-	PutToSliceReqQ(reqSlotTag);
 }
 
 void SwapLSA(unsigned int reqSlotTag){
 	unsigned int tmp = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr;
 	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr2;
 	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr2 = tmp;
+}
+
+void VectorAdd(unsigned int originReqSlotTag)
+{
+	unsigned int reqSlotTag, virtualSliceAddr;
+
+	virtualSliceAddr =  AddrTransRead(reqPoolPtr->reqPool[originReqSlotTag].logicalSliceAddr);
+
+	if(virtualSliceAddr != VSA_FAIL)
+	{
+		reqSlotTag = GetFromFreeReqQ();
+
+		reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_VEC_ADD;
+		reqPoolPtr->reqPool[reqSlotTag].reqCode = REQ_CODE_VEC_ADD;
+		reqPoolPtr->reqPool[reqSlotTag].nvmeCmdSlotTag = reqPoolPtr->reqPool[originReqSlotTag].nvmeCmdSlotTag;
+		reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr = reqPoolPtr->reqPool[originReqSlotTag].logicalSliceAddr;
+		reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr2 = reqPoolPtr->reqPool[originReqSlotTag].logicalSliceAddr2;
+
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.dataBufFormat = REQ_OPT_DATA_BUF_ENTRY;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandAddr = REQ_OPT_NAND_ADDR_VSA;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandEcc = REQ_OPT_NAND_ECC_ON;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandEccWarning = REQ_OPT_NAND_ECC_WARNING_ON;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.rowAddrDependencyCheck = REQ_OPT_ROW_ADDR_DEPENDENCY_CHECK;
+		reqPoolPtr->reqPool[reqSlotTag].reqOpt.blockSpace = REQ_OPT_BLOCK_SPACE_MAIN;
+
+		reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = reqPoolPtr->reqPool[originReqSlotTag].dataBufInfo.entry;
+		UpdateDataBufEntryInfoBlockingReq(reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry, reqSlotTag);
+		reqPoolPtr->reqPool[reqSlotTag].nandInfo.virtualSliceAddr = virtualSliceAddr;
+
+		SelectLowLevelReqQ(reqSlotTag);
+	}
 }

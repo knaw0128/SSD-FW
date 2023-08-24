@@ -424,3 +424,9 @@ void GetFromNandReqQ(unsigned int chNo, unsigned int wayNo, unsigned int reqStat
 	PutToFreeReqQ(reqSlotTag);
 	ReleaseBlockedByBufDepReq(reqSlotTag);
 }
+
+
+void PutToVecAdderReqQ(unsigned int reqSlotTag)
+{
+	// TODO: put to adder queue
+}

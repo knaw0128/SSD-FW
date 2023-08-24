@@ -186,7 +186,7 @@ void nvme_main()
 		if(exeLlr && ((nvmeDmaReqQ.headReq != REQ_SLOT_TAG_NONE) || notCompletedNandReqCnt || blockedReqCnt))
 		{
 			CheckDoneNvmeDmaReq();
-			SchedulingNandReq();
+			SchedulingNandReq(); // ?????
 		}
 	}
 }

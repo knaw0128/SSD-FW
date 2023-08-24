@@ -86,6 +86,10 @@ void SelectLowLevelReqQ(unsigned int reqSlotTag);
 void ReleaseBlockedByBufDepReq(unsigned int reqSlotTag);
 void ReleaseBlockedByRowAddrDepReq(unsigned int chNo, unsigned int wayNo);
 
+void VectorAdd(unsigned int originReqSlotTag, unsigned int target);
+void ReqTransNvmeVecAddToSlice(unsigned int cmdSlotTag, unsigned int startLba1, unsigned int startLba2, unsigned int nlb, unsigned int cmdCode);
+
+
 extern P_ROW_ADDR_DEPENDENCY_TABLE rowAddrDependencyTablePtr;
 
 #endif /* REQUEST_TRANSFORM_H_ */

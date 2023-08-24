@@ -172,7 +172,7 @@ unsigned int AllocateDataBuf()
 	return evictedEntry;
 }
 
-
+// TODO: Check blockingReqTail
 void UpdateDataBufEntryInfoBlockingReq(unsigned int bufEntry, unsigned int reqSlotTag)
 {
 	if(dataBufMapPtr->dataBuf[bufEntry].blockingReqTail != REQ_SLOT_TAG_NONE)
@@ -182,6 +182,7 @@ void UpdateDataBufEntryInfoBlockingReq(unsigned int bufEntry, unsigned int reqSl
 	}
 
 	dataBufMapPtr->dataBuf[bufEntry].blockingReqTail = reqSlotTag;
+	// blockingReqTail 看起來像是前一個使用這個 data buffer 的 reqSLotTag 是誰，在 select to low level cache 時會看
 }
 
 
