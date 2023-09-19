@@ -94,5 +94,12 @@ typedef struct _NAND_REQUEST_QUEUE
 	unsigned int reserved0 : 16;
 } NAND_REQUEST_QUEUE, *P_NAND_REQUEST_QUEUE;
 
+typedef struct _VEC_ADDER_REQUEST_QUEUE
+{
+	unsigned int headReq : 16;
+	unsigned int tailReq : 16;
+	unsigned int reqCnt : 16;
+	unsigned int reserved0 : 16;
+} VEC_ADDER_REQUEST_QUEUE, *P_VEC_ADDER_REQUEST_QUEUE;
 
 #endif /* REQUEST_QUEUE_H_ */

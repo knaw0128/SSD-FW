@@ -162,6 +162,7 @@ unsigned int CheckEccErrorInfo(unsigned int chNo, unsigned int wayNo);
 
 void ExecuteNandReq(unsigned int chNo, unsigned int wayNo, unsigned int reqStatus);
 
+void SchedulingVecAddReq();
 
 extern P_COMPLETE_FLAG_TABLE completeFlagTablePtr;
 extern P_STATUS_REPORT_TABLE statusReportTablePtr;

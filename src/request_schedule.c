@@ -971,3 +971,21 @@ void ExecuteNandReq(unsigned int chNo, unsigned int wayNo, unsigned int reqStatu
 			break;
 	}
 }
+
+
+// TODO: Complete following function
+void SchedulingVecAddReq(){
+	unsigned int reqSlotTag, prevReq;
+	// unsigned int vecAddDone = 0;
+
+	reqSlotTag = vecAdderReqQ.tailReq;
+
+	while(reqSlotTag != REQ_SLOT_TAG_NONE)
+	{
+		prevReq = reqPoolPtr->reqPool[reqSlotTag].prevReq;
+
+		SelectiveGetFromVecAdderReqQ(reqSlotTag);
+
+		reqSlotTag = prevReq;
+	}
+}

@@ -142,6 +142,7 @@ void InitNandArray()
 			reqPoolPtr->reqPool[reqSlotTag].nandInfo.physicalBlock = 0;	//dummy
 			reqPoolPtr->reqPool[reqSlotTag].nandInfo.physicalPage = 0;	//dummy
 			reqPoolPtr->reqPool[reqSlotTag].prevBlockingReq = REQ_SLOT_TAG_NONE;
+			reqPoolPtr->reqPool[reqSlotTag].ref_count = 0;
 
 			SelectLowLevelReqQ(reqSlotTag);
 
@@ -158,6 +159,7 @@ void InitNandArray()
 			reqPoolPtr->reqPool[reqSlotTag].nandInfo.physicalBlock = 0;	//dummy
 			reqPoolPtr->reqPool[reqSlotTag].nandInfo.physicalPage = 0;	//dummy
 			reqPoolPtr->reqPool[reqSlotTag].prevBlockingReq = REQ_SLOT_TAG_NONE;
+			reqPoolPtr->reqPool[reqSlotTag].ref_count = 0;
 
 			SelectLowLevelReqQ(reqSlotTag);
 		}

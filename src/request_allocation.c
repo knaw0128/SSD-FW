@@ -54,6 +54,7 @@ BLOCKED_BY_BUFFER_DEPENDENCY_REQUEST_QUEUE blockedByBufDepReqQ;
 BLOCKED_BY_ROW_ADDR_DEPENDENCY_REQUEST_QUEUE blockedByRowAddrDepReqQ[USER_CHANNELS][USER_WAYS];
 NVME_DMA_REQUEST_QUEUE nvmeDmaReqQ;
 NAND_REQUEST_QUEUE nandReqQ[USER_CHANNELS][USER_WAYS];
+VEC_ADDER_REQUEST_QUEUE vecAdderReqQ;
 
 unsigned int notCompletedNandReqCnt;
 unsigned int blockedReqCnt;
@@ -79,6 +80,10 @@ void InitReqPool()
 	nvmeDmaReqQ.tailReq = REQ_SLOT_TAG_NONE;
 	nvmeDmaReqQ.reqCnt = 0;
 
+	vecAdderReqQ.headReq = REQ_SLOT_TAG_NONE;
+	vecAdderReqQ.tailReq = REQ_SLOT_TAG_NONE;
+	vecAdderReqQ.reqCnt = 0;
+
 	for(chNo = 0; chNo<USER_CHANNELS; chNo++)
 		for(wayNo = 0; wayNo<USER_WAYS; wayNo++)
 		{
@@ -98,6 +103,7 @@ void InitReqPool()
 		reqPoolPtr->reqPool[reqSlotTag].nextBlockingReq = REQ_SLOT_TAG_NONE;
 		reqPoolPtr->reqPool[reqSlotTag].prevReq = reqSlotTag - 1;
 		reqPoolPtr->reqPool[reqSlotTag].nextReq = reqSlotTag + 1;
+		reqPoolPtr->reqPool[reqSlotTag].ref_count = 0;
 	}
 
 	reqPoolPtr->reqPool[0].prevReq = REQ_SLOT_TAG_NONE;
@@ -107,7 +113,6 @@ void InitReqPool()
 	notCompletedNandReqCnt = 0;
 	blockedReqCnt = 0;
 }
-
 
 void PutToFreeReqQ(unsigned int reqSlotTag)
 {
@@ -155,6 +160,8 @@ unsigned int GetFromFreeReqQ()
 
 	reqPoolPtr->reqPool[reqSlotTag].reqQueueType =  REQ_QUEUE_TYPE_NONE;
 	freeReqQ.reqCnt--;
+
+	reqPoolPtr->reqPool[reqSlotTag].ref_count = 0;
 
 	return reqSlotTag;
 }
@@ -227,6 +234,8 @@ void PutToBlockedByBufDepReqQ(unsigned int reqSlotTag)
 	blockedByBufDepReqQ.reqCnt++;
 	blockedReqCnt++;
 }
+
+// Only way to release dependency
 void SelectiveGetFromBlockedByBufDepReqQ(unsigned int reqSlotTag)
 {
 	unsigned int prevReq, nextReq;
@@ -428,5 +437,64 @@ void GetFromNandReqQ(unsigned int chNo, unsigned int wayNo, unsigned int reqStat
 
 void PutToVecAdderReqQ(unsigned int reqSlotTag)
 {
-	// TODO: put to adder queue
+	if(vecAdderReqQ.tailReq != REQ_SLOT_TAG_NONE)
+	{
+		reqPoolPtr->reqPool[reqSlotTag].prevReq = vecAdderReqQ.tailReq;
+		reqPoolPtr->reqPool[reqSlotTag].nextReq = REQ_SLOT_TAG_NONE;
+		reqPoolPtr->reqPool[vecAdderReqQ.tailReq].nextReq = reqSlotTag;
+		vecAdderReqQ.tailReq = reqSlotTag;
+	}
+	else
+	{
+		reqPoolPtr->reqPool[reqSlotTag].prevReq = REQ_SLOT_TAG_NONE;
+		reqPoolPtr->reqPool[reqSlotTag].nextReq = REQ_SLOT_TAG_NONE;
+		vecAdderReqQ.headReq = reqSlotTag;
+		vecAdderReqQ.tailReq = reqSlotTag;
+	}
+
+	reqPoolPtr->reqPool[reqSlotTag].reqQueueType = REQ_QUEUE_TYPE_VECADD;
+	vecAdderReqQ.reqCnt++;
+}
+
+void SelectiveGetFromVecAdderReqQ(unsigned int reqSlotTag)
+{
+	unsigned int prevReq, nextReq;
+
+	prevReq = reqPoolPtr->reqPool[reqSlotTag].prevReq;
+	nextReq = reqPoolPtr->reqPool[reqSlotTag].nextReq;
+
+	if((nextReq != REQ_SLOT_TAG_NONE) && (prevReq != REQ_SLOT_TAG_NONE))
+	{
+		reqPoolPtr->reqPool[prevReq].nextReq = nextReq;
+		reqPoolPtr->reqPool[nextReq].prevReq = prevReq;
+	}
+	else if((nextReq == REQ_SLOT_TAG_NONE) && (prevReq != REQ_SLOT_TAG_NONE))
+	{
+		reqPoolPtr->reqPool[prevReq].nextReq = REQ_SLOT_TAG_NONE;
+		vecAdderReqQ.tailReq = prevReq;
+	}
+	else if((nextReq != REQ_SLOT_TAG_NONE) && (prevReq == REQ_SLOT_TAG_NONE))
+	{
+		reqPoolPtr->reqPool[nextReq].prevReq = REQ_SLOT_TAG_NONE;
+		vecAdderReqQ.headReq = nextReq;
+	}
+	else
+	{
+		vecAdderReqQ.headReq = REQ_SLOT_TAG_NONE;
+		vecAdderReqQ.tailReq = REQ_SLOT_TAG_NONE;
+	}
+
+	reqPoolPtr->reqPool[reqSlotTag].reqQueueType = REQ_QUEUE_TYPE_NONE;
+	vecAdderReqQ.reqCnt--;
+
+	VecAdderCalculate(
+		reqPoolPtr->reqPool[reqSlotTag].dataBufInfoSource1, 
+		reqPoolPtr->reqPool[reqSlotTag].dataBufInfoSource2,
+		reqPoolPtr->reqPool[reqSlotTag].dataBufInfo);
+	PutToFreeReqQ(reqSlotTag);
+	ReleaseBlockedByBufDepReq(reqSlotTag);
+}
+
+void VecAdderCalculate(unsigned int source1, unsigned int source2, unsigned int result){
+	// send to hardware and prob until it done
 }

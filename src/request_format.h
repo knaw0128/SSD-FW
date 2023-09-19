@@ -60,6 +60,7 @@
 #define REQ_QUEUE_TYPE_BLOCKED_BY_ROW_ADDR_DEP		0x4
 #define REQ_QUEUE_TYPE_NVME_DMA						0x5
 #define REQ_QUEUE_TYPE_NAND							0x6
+#define REQ_QUEUE_TYPE_VECADD						0x7
 
 #define REQ_CODE_WRITE				0x00
 #define REQ_CODE_READ				0x08
@@ -172,7 +173,9 @@ typedef struct _SSD_REQ_FORMAT
 	unsigned int nextBlockingReq : 16;
 
 	unsigned int logicalSliceAddr2;
-
+	unsigned int ref_count;
+	DATA_BUF_INFO dataBufInfoSource1;
+	DATA_BUF_INFO dataBufInfoSource2;
 } SSD_REQ_FORMAT, *P_SSD_REQ_FORMAT;
 
 #endif /* REQUEST_FORMAT_H_ */

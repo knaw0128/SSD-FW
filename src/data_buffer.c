@@ -179,10 +179,10 @@ void UpdateDataBufEntryInfoBlockingReq(unsigned int bufEntry, unsigned int reqSl
 	{
 		reqPoolPtr->reqPool[reqSlotTag].prevBlockingReq = dataBufMapPtr->dataBuf[bufEntry].blockingReqTail;
 		reqPoolPtr->reqPool[reqPoolPtr->reqPool[reqSlotTag].prevBlockingReq].nextBlockingReq  = reqSlotTag;
+		reqPoolPtr->reqPool[reqSlotTag].ref_count++;
 	}
 
 	dataBufMapPtr->dataBuf[bufEntry].blockingReqTail = reqSlotTag;
-	// blockingReqTail 看起來像是前一個使用這個 data buffer 的 reqSLotTag 是誰，在 select to low level cache 時會看
 }
 
 
@@ -199,6 +199,7 @@ void UpdateTempDataBufEntryInfoBlockingReq(unsigned int bufEntry, unsigned int r
 	{
 		reqPoolPtr->reqPool[reqSlotTag].prevBlockingReq = tempDataBufMapPtr->tempDataBuf[bufEntry].blockingReqTail;
 		reqPoolPtr->reqPool[reqPoolPtr->reqPool[reqSlotTag].prevBlockingReq].nextBlockingReq  = reqSlotTag;
+		reqPoolPtr->reqPool[reqSlotTag].ref_count++;
 	}
 
 	tempDataBufMapPtr->tempDataBuf[bufEntry].blockingReqTail = reqSlotTag;

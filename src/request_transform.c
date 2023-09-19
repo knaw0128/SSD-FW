@@ -226,18 +226,19 @@ void DataReadFromNand(unsigned int originReqSlotTag)
 void ReqTransSliceToLowLevel()
 {
 	unsigned int reqSlotTag, dataBufEntry;
-	unsigned int dataBufEntry2, resultDataBufferEntry;
+	
 
 	while(sliceReqQ.headReq != REQ_SLOT_TAG_NONE)
 	{
 		reqSlotTag = GetFromSliceReqQ();
 		if(reqSlotTag == REQ_SLOT_TAG_FAIL)
 			return ;
-
+		
 		//allocate a data buffer entry for this request
 		dataBufEntry = CheckDataBufHit(reqSlotTag);
 		if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_VEC_ADD){
-			
+			unsigned int dataBufEntry2, resultDataBufferEntry;
+
 			SwapLSA(reqSlotTag);
 			dataBufEntry2 = CheckDataBufHit(reqSlotTag);
 			
@@ -249,7 +250,6 @@ void ReqTransSliceToLowLevel()
 				PutToDataBufHashList(dataBufEntry2);
 				DataReadFromNand(reqSlotTag);
 			}
-			UpdateDataBufEntryInfoBlockingReq(dataBufEntry2, reqSlotTag);
 			SwapLSA(reqSlotTag);
 
 			if(dataBufEntry == DATA_BUF_FAIL){
@@ -260,7 +260,6 @@ void ReqTransSliceToLowLevel()
 				PutToDataBufHashList(dataBufEntry);
 				DataReadFromNand(reqSlotTag);
 			}
-			UpdateDataBufEntryInfoBlockingReq(dataBufEntry, reqSlotTag);
 
 			resultDataBufferEntry = AllocateDataBuf();
 			reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = resultDataBufferEntry;
@@ -268,7 +267,8 @@ void ReqTransSliceToLowLevel()
 			dataBufMapPtr->dataBuf[dataBufEntry].logicalSliceAddr = reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr;
 			PutToDataBufHashList(resultDataBufferEntry);
 
-			VectorAdd(reqSlotTag); // result put at lsa 1
+			VectorAdd(reqSlotTag, dataBufEntry, dataBufEntry2); // result put at lsa 1
+			dataBufEntry = resultDataBufferEntry;
 		}
 		else if(dataBufEntry != DATA_BUF_FAIL)
 		{
@@ -312,14 +312,19 @@ void ReqTransSliceToLowLevel()
 		reqPoolPtr->reqPool[reqSlotTag].reqType = REQ_TYPE_NVME_DMA;
 		reqPoolPtr->reqPool[reqSlotTag].reqOpt.dataBufFormat = REQ_OPT_DATA_BUF_ENTRY;
 
-		UpdateDataBufEntryInfoBlockingReq(dataBufEntry);
+		UpdateDataBufEntryInfoBlockingReq(dataBufEntry, reqSlotTag);
 		SelectLowLevelReqQ(reqSlotTag);
 	}
 }
 
 unsigned int CheckBufDep(unsigned int reqSlotTag)
 {
-	if(reqPoolPtr->reqPool[reqSlotTag].prevBlockingReq == REQ_SLOT_TAG_NONE)
+	// if(reqPoolPtr->reqPool[reqSlotTag].prevBlockingReq == REQ_SLOT_TAG_NONE)
+	// 	return BUF_DEPENDENCY_REPORT_PASS;
+	// else
+	// 	return BUF_DEPENDENCY_REPORT_BLOCKED;
+	
+	if(reqPoolPtr->reqPool[reqSlotTag].ref_count == 0)
 		return BUF_DEPENDENCY_REPORT_PASS;
 	else
 		return BUF_DEPENDENCY_REPORT_BLOCKED;
@@ -443,7 +448,7 @@ unsigned int UpdateRowAddrDepTableForBufBlockedReq(unsigned int reqSlotTag)
 	return ROW_ADDR_DEPENDENCY_TABLE_UPDATE_REPORT_DONE;
 }
 
-
+// TODO: Check dependency of vec add before pushing to the queue
 void SelectLowLevelReqQ(unsigned int reqSlotTag)
 {
 	unsigned int dieNo, chNo, wayNo, bufDepCheckReport, rowAddrDepCheckReport, rowAddrDepTableUpdateReport;
@@ -511,9 +516,10 @@ void SelectLowLevelReqQ(unsigned int reqSlotTag)
 				else
 					assert(!"[WARNING] Not supported report [WARNING]");
 			}
-		else if(reqPoolPtr->reqPool[reqSlotTag].reqType == REQ_TYPE_VEC_ADD){
-			PutToVecAdderReqQ(reqSlotTag);
-		}
+		// else if(reqPoolPtr->reqPool[reqSlotTag].reqType == REQ_TYPE_VEC_ADD){
+		// 	// Not sure what to do before push to queue
+		// 	PutToVecAdderReqQ(reqSlotTag);
+		// }
 		PutToBlockedByBufDepReqQ(reqSlotTag);
 	}
 	else
@@ -531,6 +537,7 @@ void ReleaseBlockedByBufDepReq(unsigned int reqSlotTag)
 		targetReqSlotTag = reqPoolPtr->reqPool[reqSlotTag].nextBlockingReq;
 		reqPoolPtr->reqPool[targetReqSlotTag].prevBlockingReq = REQ_SLOT_TAG_NONE;
 		reqPoolPtr->reqPool[reqSlotTag].nextBlockingReq = REQ_SLOT_TAG_NONE;
+		reqPoolPtr->reqPool[targetReqSlotTag].ref_count--;
 	}
 
 	if(reqPoolPtr->reqPool[reqSlotTag].reqOpt.dataBufFormat == REQ_OPT_DATA_BUF_ENTRY)
@@ -579,6 +586,9 @@ void ReleaseBlockedByBufDepReq(unsigned int reqSlotTag)
 				PutToNandReqQ(targetReqSlotTag, chNo, wayNo);
 			else
 				assert(!"[WARNING] Not supported reqOpt [WARNING]");
+		}
+		else if(reqPoolPtr->reqPool[targetReqSlotTag].reqType  == REQ_TYPE_VEC_ADD){
+			PutToVecAdderReqQ(targetReqSlotTag);
 		}
 	}
 }
@@ -662,7 +672,7 @@ void CheckDoneNvmeDmaReq()
 	unsigned int rxDone, txDone;
 
 	reqSlotTag = nvmeDmaReqQ.tailReq;
-	rxDone = 0;
+	rxDone = 0; // The usage of this variable
 	txDone = 0;
 
 	while(reqSlotTag != REQ_SLOT_TAG_NONE)
@@ -677,7 +687,7 @@ void CheckDoneNvmeDmaReq()
 			if(rxDone)
 				SelectiveGetFromNvmeDmaReqQ(reqSlotTag);
 		}
-		else
+		else if (reqPoolPtr->reqPool[reqSlotTag].reqCode  == REQ_CODE_TxDMA)
 		{
 			if(!txDone)
 				txDone = check_auto_tx_dma_partial_done(reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.reqTail , reqPoolPtr->reqPool[reqSlotTag].nvmeDmaInfo.overFlowCnt);
@@ -731,7 +741,8 @@ void SwapLSA(unsigned int reqSlotTag){
 	reqPoolPtr->reqPool[reqSlotTag].logicalSliceAddr2 = tmp;
 }
 
-void VectorAdd(unsigned int originReqSlotTag)
+// Push a VecAdd request to queue
+void VectorAdd(unsigned int originReqSlotTag, unsigned int sourceDataBuffer1, unsigned int sourceDataBuffer2)
 {
 	unsigned int reqSlotTag, virtualSliceAddr;
 
@@ -756,7 +767,13 @@ void VectorAdd(unsigned int originReqSlotTag)
 
 		reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry = reqPoolPtr->reqPool[originReqSlotTag].dataBufInfo.entry;
 		UpdateDataBufEntryInfoBlockingReq(reqPoolPtr->reqPool[reqSlotTag].dataBufInfo.entry, reqSlotTag);
-		reqPoolPtr->reqPool[reqSlotTag].nandInfo.virtualSliceAddr = virtualSliceAddr;
+		// reqPoolPtr->reqPool[reqSlotTag].nandInfo.virtualSliceAddr = virtualSliceAddr; 沒有寫到記憶體 應該不需要 (?)
+
+		reqPoolPtr->reqPool[reqSlotTag].dataBufInfoSource1.entry = sourceDataBuffer1;
+		UpdateDataBufEntryInfoBlockingReq(reqPoolPtr->reqPool[reqSlotTag].dataBufInfoSource1.entry, reqSlotTag);
+
+		reqPoolPtr->reqPool[reqSlotTag].dataBufInfoSource2.entry = sourceDataBuffer2;
+		UpdateDataBufEntryInfoBlockingReq(reqPoolPtr->reqPool[reqSlotTag].dataBufInfoSource2.entry, reqSlotTag);
 
 		SelectLowLevelReqQ(reqSlotTag);
 	}
